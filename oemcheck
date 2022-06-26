@@ -1,5 +1,5 @@
 #! /bin/bash
-#date:2022.5.18 lvze
+#lvze
 #linux os check OEM package 
 #SSH no password  must be configured on 192.168.1.131 before use
 
@@ -241,6 +241,11 @@ checkpattern(){
 		echo -e "\e[1;31mERROR: web home taosd has taos or TDengine!\e[0m"
 	#todo	exit
 	fi
+	email=$(cat $cfgName |grep -w $emailName)
+	if [ $? -gt 0 ];then
+		echo -e "\e[1;31mERROR: cfg file email address error!\e[0m"
+	#todo	exit
+	fi
 
 }
 
@@ -294,6 +299,7 @@ case $1 in
 	adaptercfgName=/etc/hm/hmadapter.toml
 	rundName=/usr/local/hm/bin/run_hmd_and_hmadapter.sh
 	gdbName=/usr/local/hm/bin/hmd-dump-cfg.gdb
+	emailName=support@zt.net.cn
 	uninstallName=rmhm
 	uninstalltoolName=rmhmtools
 	install
@@ -329,6 +335,7 @@ case $1 in
 	adaptercfgName=/etc/ProDB/proadapter.toml
 	rundName=/usr/local/ProDB/bin/run_prodbs_and_proadapter.sh
 	gdbName=/usr/local/ProDB/bin/prodbs-dump-cfg.gdb
+	emailName=support@hanatech.com.cn
 	uninstallName=rmpro
 	uninstalltoolName=rmprodbtools
 	install
@@ -364,6 +371,7 @@ case $1 in
 	adaptercfgName=/etc/kinghistorian/khadapter.toml
 	rundName=/usr/local/kinghistorian/bin/run_khserver_and_khadapter.sh
 	gdbName=/usr/local/kinghistorian/bin/khserver-dump-cfg.gdb
+	emailName=support@wellintech.com
 	uninstallName=rmkh
 	uninstalltoolName=rmkhtools
 	install
@@ -399,6 +407,7 @@ case $1 in
 	adaptercfgName=/etc/jh_taos/jh_taosadapter.toml
 	rundName=/usr/local/jh_taos/bin/run_jh_taosd_and_jh_taosadapter.sh
 	gdbName=/usr/local/jh_taos/bin/jh_taosd-dump-cfg.gdb
+	emailName=jhkj@njsteel.com.cn
 	uninstallName=rmjh
 	uninstalltoolName=rmjhtools
 	install
@@ -434,6 +443,7 @@ case $1 in
 	adaptercfgName=/etc/power/poweradapter.toml
 	rundName=/usr/local/power/bin/run_powerd_and_poweradapter.sh
 	gdbName=/usr/local/power/bin/powerd-dump-cfg.gdb
+	emailName=support@sgitg.sgcc.com.cn
 	uninstallName=rmpower
 	uninstalltoolName=rmpowertools
 	install
@@ -469,6 +479,7 @@ case $1 in
 	adaptercfgName=/etc/ibkhistory/ibkhistoryadapter.toml
 	rundName=/usr/local/ibkhistory/bin/run_ibkhistoryd_and_ibkhistoryadapter.sh
 	gdbName=/usr/local/ibkhistory/bin/ibkhistoryd-dump-cfg.gdb
+	emailName=bkdgyy@ustb.edu.cn
 	uninstallName=rmibkhistory
 	uninstalltoolName=rmibkhistorytools
 	install
