@@ -1,0 +1,486 @@
+#! /bin/bash
+#date:2022.5.18 lvze
+#linux os check OEM package 
+#SSH no password  must be configured on 192.168.1.131 before use
+
+tardir=/root/oemtar
+mkdir -p $tardir 1>/dev/null 2>/dev/null
+
+
+install (){
+	fournum=$(echo $versionNum|gawk '/^[0-9]\.[0-9]\.[0-9]\.[0-9]/{print $0}')
+	if [ ! -n "${fournum}" ];then
+		echo -e "\e[1;31mERROR: version number input error! version number like 2.4.0.18\e[0m"
+	        exit
+	fi
+	sshpass -V 1>/dev/null 2>/dev/null
+	if [ $? -ne 0 ]; then
+		apt install sshpass 1>/dev/null 2>/dev/null
+		yum isntall -y sshpass 1>/dev/null 2>/dev/null
+	fi
+
+	rm -rf $tardir/*
+	sshpass -p tbase125! scp -r ubuntu@192.168.1.131:/nas/$dirName/*$versionNum/*gz $tardir
+	rmtaos 1>/dev/null 2>/dev/null
+	rmhm 1>/dev/null 2>/dev/null
+	rmkh 1>/dev/null 2>/dev/null
+	rmpower 1>/dev/null 2>/dev/null
+	rmpro 1>/dev/null 2>/dev/null
+	rmtq 1>/dev/null 2>/dev/null
+	rmjh 1>/dev/null 2>/dev/null
+	rmibkhistory 1>/dev/null 2>/dev/null
+
+
+	rm -rf /var/lib/taos/*
+	rm -rf /var/lib/hm/*
+	rm -rf /var/lib/kinghistorian/*
+	rm -rf /var/lib/power/*
+	rm -rf /var/lib/ProDB/*
+	rm -rf /var/lib/tq/*
+	rm -rf /var/lib/jh_taos/*
+	rm -rf /var/lib/ibkhistory/*
+	
+	rm -rf /etc/taos/*
+	rm -rf /etc/hm/*
+	rm -rf /etc/kinghistorian/*
+	rm -rf /etc/power/*
+	rm -rf /etc/ProDB/*
+	rm -rf /etc/tq/*
+	rm -rf /etc/jh_taos/*
+	rm -rf /etc/ibkhistory/*
+
+	cd $tardir && tar zxf $serName && cd $serdisName && ./install.sh -e no >$tardir/result.txt
+	cd $tardir && tar zxf $arbName && cd $arbdisName && ./install_arbi.sh
+	cd $tardir && tar zxf $toolName && rm -rf $toolName && cd $tooldisName && ./install*.sh
+	systemctl start $serverd
+	systemctl status $serverd
+	systemctl start $adapterd
+	systemctl status $adapterd
+	systemctl start tarbitratord 
+	systemctl status tarbitratord
+
+}
+
+insert(){
+	cd $datadir
+	mkdir -p $dumpdir $dumpnopassdir
+	$cli -s "create database db2;"
+	$cli -s "create stable db2.stb1(time timestamp,id int,col1 nchar(20)) tags(tid int,name binary(200));"
+	sleep 2
+	$cli -s "insert into db2.t1 using db2.stb1 tags(1,'a') values(now,1,'涛思');"
+	$cli -s "select * from db2.stb1;"
+	$dumpName -o $dumpdir -u root -p$pass -D db2 >$tardir/dumpout.txt
+	$dumpName -o $dumpnopassdir  -D db2 >$tardir/dumpoutnopass.txt
+	$cli -s "drop database db2;"
+	$dumpName -i $dumpdir -u root -p$pass >$tardir/dumpin.txt
+	$dumpName -i $dumpnopassdir  >$tardir/dumpinnopass.txt
+	$cli -s "select * from db2.stb1;"
+	$demoName -u root -p$pass  -n 1 -t 1 -y >$tardir/benchmark.txt 
+}
+
+checkpattern(){
+	cfgnum=$(cat $cfgName|grep 'taos\|TDengine'|wc -l)
+	if [ $cfgnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: cfgfile has taos or TDengine!\e[0m"
+	#todo 	exit
+	fi
+	ls -l $tardir/$serdisName/connector 1>/dev/null 2>/dev/null
+	if [ $? -eq 0 ];then
+		echo -e "\e[1;31mERROR: connector directory exists!\e[0m"
+		#todo exit
+	fi
+	ls -l $tardir/$serdisName/examples 1>/dev/null 2>/dev/null
+	if [ $? -eq 0 ];then
+		echo -e "\e[1;31mERROR: example directory exists!\e[0m"
+		exit
+	fi
+	taoshelpnum=$($cli --help|grep 'taos\|TDengine'|wc -l)
+	if [ $taoshelpnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: taos --help has taos or TDengine!\e[0m"
+	#todo	exit
+	fi
+	serverdCnum=$($serverd -C|grep 'taos\|TDengine'|wc -l)
+	if [ $serverdCnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: $serverd -C has taos or TDengine!\e[0m"
+		exit
+	fi
+	cliCnum=$($cli -C|grep 'taos\|TDengine'|wc -l)
+	if [ $cliCnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: $cli -C has taos or TDengine!\e[0m"
+		exit
+	fi
+	ls -l $hisName
+	if [ $? -ne 0 ];then
+		echo -e "\e[1;31mERROR: taos_history file name error!\e[0m"
+		exit
+	fi
+	ls -l $logdName
+	if [ $? -ne 0 ];then
+		echo -e "\e[1;31mERROR: serverd log name error!\e[0m"
+		exit
+	fi
+	ls -l $logName
+	if [ $? -ne 0 ];then
+		echo -e "\e[1;31mERROR: client log name error!\e[0m"
+		exit
+	fi
+	ls -l $loginfoName
+	if [ $? -ne 0 ];then
+		echo -e "\e[1;31mERROR: info log name error!\e[0m"
+		exit
+	fi
+	ls -l $installdirName
+	if [ $? -ne 0 ];then
+		echo -e "\e[1;31mERROR: install directory name error!\e[0m"
+		exit
+	fi
+	ctlnum=$(systemctl status $serverd|grep 'taos\|TDengine'|wc -l)
+	if [ $ctlnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: systemctl  has taos or TDengine!\e[0m"
+		exit
+	fi
+	$cli -s "show databases;" >$tardir/test.txt
+	clinum=$(cat $tardir/test.txt|grep 'taos\|TDengine\|TAOS'|wc -l)
+	if [ $clinum -gt 0 ];then
+		echo -e "\e[1;31mERROR: client shell has taos or TDengine!\e[0m"
+	#todo	exit
+	fi
+	$cli -u root -p$pass -s "show databases;" >$tardir/test1.txt
+	cli1num=$(cat $tardir/test1.txt|grep 'taos\|TDengine\|TAOS'|wc -l)
+	if [ $cli1num -gt 0 ];then
+		echo -e "\e[1;31mERROR: client shell has taos or TDengine!\e[0m"
+	#todo	exit
+	fi
+	sh1num=$(cat $tardir/$serdisName/install.sh|grep function|grep 'taos\|TDengine'|wc -l)
+	if [ $sh1num -gt 0 ];then
+		echo -e "\e[1;31mERROR: install.sh has taos or TDengine!\e[0m"
+		exit
+	fi
+	sh2num=$(cat $installdirName/bin/remove.sh|grep function|grep 'taos\|TDengine'|wc -l)
+	if [ $sh2num -gt 0 ];then
+		echo -e "\e[1;31mERROR: remove.sh has taos or TDengine!\e[0m"
+		exit
+	fi
+	install1num=$(cat $tardir/result.txt|grep -v access|grep 'taos\|TDengine'|wc -l)
+	if [ $install1num -gt 0 ];then
+		echo -e "\e[1;31mERROR: install.sh print result has taos or TDengine!\e[0m"
+		exit
+	fi
+	benchmarkhelpnum=$($demoName --help|grep 'taos\|TDengine'|wc -l)
+	if [ $benchmarkhelpnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: benchmark --help has taos or TDengine!\e[0m"
+		#todo exit
+	fi
+	dumphelpnum=$($dumpName --help|grep 'taos\|TDengine'|wc -l)
+	if [ $dumphelpnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: dump --help has taos or TDengine!\e[0m"
+	#todo	exit
+	fi
+	benchmarkresnum=$(cat $tardir/benchmark.txt|grep 'taos\|TDengine'|wc -l)
+	if [ $benchmarkresnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: benchmark result has taos or TDengine!\e[0m"
+	#	todo exit
+	fi
+	dumpoutnum=$(cat $tardir/dumpout.txt|grep 'taos\|TDengine'|wc -l)
+	if [ $dumpoutnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: dump out has taos or TDengine!\e[0m"
+		exit
+	fi
+	dumpoutnopassnum=$(cat $tardir/dumpoutnopass.txt|grep 'taos\|TDengine'|wc -l)
+	if [ $dumpoutnopassnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: dumpnopass out has taos or TDengine!\e[0m"
+		#todo exit
+	fi
+	dumpinnum=$(cat $tardir/dumpin.txt|grep 'taos\|TDengine'|wc -l)
+	if [ $dumpinnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: dump in has taos or TDengine!\e[0m"
+		exit
+	fi
+	dumpinnopassnum=$(cat $tardir/dumpinnopass.txt|grep 'taos\|TDengine'|wc -l)
+	if [ $dumpinnopassnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: dumpnopass in has taos or TDengine!\e[0m"
+	#todo	exit
+	fi
+	ctladapternum=$(systemctl status $adapterd|grep 'taos\|TDengine'|wc -l)
+	if [ $ctladapternum -gt 0 ];then
+		echo -e "\e[1;31mERROR: systemctl status adapter has taos or TDengine!\e[0m"
+		exit
+	fi
+	ls -l $adaptercfgName
+	if [ $? -ne 0 ];then
+		echo -e "\e[1;31mERROR: adapter cfg file name error!\e[0m"
+	#todo	exit
+	fi
+	ls -l $gdbName
+	if [ $? -ne 0 ];then
+		echo -e "\e[1;31mERROR: taosd-dump-cfg.gdb file name error!\e[0m"
+		exit
+	fi
+	adaptercfgnum=$(cat  $adaptercfgName|grep -v Config|grep 'taos\|TDengine'|wc -l)
+	if [ $adaptercfgnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: adapter cfg file has taos or TDengine!\e[0m"
+	#todo	exit
+	fi
+	ls -l $rundName
+	if [ $? -ne 0 ];then
+		echo -e "\e[1;31mERROR: run_taosd_and_taosadapter.sh file name error!\e[0m"
+		# todo exit
+	fi
+	web1num=$(cat  /usr/local/nginxd/admin/login.html|grep 'taos\|TDengine'|wc -l)
+	if [ $web1num -gt 0 ];then
+		echo -e "\e[1;31mERROR: web login has taos or TDengine!\e[0m"
+		exit
+	fi
+	web2num=$(cat  /usr/local/nginxd/admin/home.html|grep 'taos\|TDengine\|TAOS'|wc -l)
+	if [ $web2num -gt 0 ];then
+		echo -e "\e[1;31mERROR: web home has taos or TDengine!\e[0m"
+	#todo	exit
+	fi
+	web3num=$(cat  /usr/local/nginxd/admin/monitor.html|grep -v _taosd|grep 'taos\|TDengine\|taosd'|wc -l)
+	if [ $web3num -gt 0 ];then
+		echo -e "\e[1;31mERROR: web home taosd has taos or TDengine!\e[0m"
+	#todo	exit
+	fi
+
+}
+
+uninstall(){
+	systemctl stop $serverd
+	$uninstallName >$tardir/uninstall.txt
+	if [ $? -ne 0 ];then
+		echo -e "\e[1;31mERROR: uninstall has error!\e[0m"
+		#todo exit
+	fi
+	$uninstalltoolName >$tardir/uninstalltool.txt
+	if [ $? -ne 0 ];then
+		echo -e "\e[1;31mERROR: uninstall tool has error!\e[0m"
+	#todo	exit
+	fi
+	uninstallnum=$(cat  $tardir/uninstall*.txt|grep 'taos\|TDengine'|wc -l)
+	if [ $uninstallnum -gt 0 ];then
+		echo -e "\e[1;31mERROR: rmtaos or rmtaostools has taos or TDengine!\e[0m"
+	#todo	exit
+	fi
+	rm -rf $tardir/*Tool*
+}
+
+
+case $1 in
+"hm")
+	serName=HMengine-enterprise-server-$2-Linux-x64.tar.gz
+	serdisName=HMengine-enterprise-server-$2
+	cliName=HMengine-enterprise-client-$2-Linux-x64.tar.gz
+	arbName=HMengine-enterprise-arbitrator-$2-Linux-x64.tar.gz
+	arbdisName=HMengine-enterprise-arbitrator-$2
+	toolName=*Tools-*-Linux-x64.tar.gz
+	tooldisName=*Tools*
+	dirName=HMengine
+	versionNum=$2
+	serverd=hmd
+	cli=hm
+	pass=hmdata
+	adapterd=hmadapter
+	demoName=hmBenchmark
+	dumpName=hmdump
+	datadir=/var/lib/hm
+	dumpdir=/var/lib/hm/dump
+	dumpnopassdir=/var/lib/hm/dumpnopass
+	cfgName=/etc/hm/hm.cfg
+	hisName=/root/.hm_history
+	logdName=/var/log/hm/hmdlog*
+	logName=/var/log/hm/hmlog*
+	loginfoName=/var/log/hm/hminfo*
+	installdirName=/usr/local/hm
+	adaptercfgName=/etc/hm/hmadapter.toml
+	rundName=/usr/local/hm/bin/run_hmd_and_hmadapter.sh
+	gdbName=/usr/local/hm/bin/hmd-dump-cfg.gdb
+	uninstallName=rmhm
+	uninstalltoolName=rmhmtools
+	install
+	insert
+	checkpattern
+	uninstall
+	;;
+"pro")
+	serName=ProDB-enterprise-server-$2-Linux-x64.tar.gz
+	serdisName=ProDB-enterprise-server-$2
+	cliName=ProDB-enterprise-client-$2-Linux-x64.tar.gz
+	arbName=ProDB-enterprise-arbitrator-$2-Linux-x64.tar.gz
+	arbdisName=ProDB-enterprise-arbitrator-$2
+	toolName=*Tools-*-Linux-x64.tar.gz
+	tooldisName=*Tools*
+	dirName=ProDB
+	versionNum=$2
+	serverd=prodbs
+	cli=prodbc
+	pass=prodb
+	adapterd=proadapter
+	demoName=proBenchmark
+	dumpName=prodump
+	datadir=/var/lib/ProDB
+	dumpdir=/var/lib/ProDB/dump
+	dumpnopassdir=/var/lib/ProDB/dumpnopass
+	cfgName=/etc/ProDB/prodb.cfg
+	hisName=/root/.prodb_history
+	logdName=/var/log/ProDB/prodlog*
+	logName=/var/log/ProDB/prolog*
+	loginfoName=/var/log/ProDB/proinfo*
+	installdirName=/usr/local/ProDB
+	adaptercfgName=/etc/ProDB/proadapter.toml
+	rundName=/usr/local/ProDB/bin/run_prodbs_and_proadapter.sh
+	gdbName=/usr/local/ProDB/bin/prodbs-dump-cfg.gdb
+	uninstallName=rmpro
+	uninstalltoolName=rmprodbtools
+	install
+	insert
+	checkpattern
+	uninstall
+	;;
+"kh")
+	serName=KingHistorian-enterprise-server-$2-Linux-x64.tar.gz
+	serdisName=KingHistorian-enterprise-server-$2
+	cliName=KingHistorian-enterprise-client-$2-Linux-x64.tar.gz
+	arbName=KingHistorian-enterprise-arbitrator-$2-Linux-x64.tar.gz
+	arbdisName=KingHistorian-enterprise-arbitrator-$2
+	toolName=*Tools-*-Linux-x64.tar.gz
+	tooldisName=*Tools*
+	dirName=KingHistorian
+	versionNum=$2
+	serverd=khserver
+	cli=khclient
+	pass=khroot
+	adapterd=khadapter
+	demoName=khBenchmark
+	dumpName=khdump
+	datadir=/var/lib/kinghistorian
+	dumpdir=/var/lib/kinghistorian/dump
+	dumpnopassdir=/var/lib/kinghistorian/dumpnopass
+	cfgName=/etc/kinghistorian/kinghistorian.cfg
+	hisName=/root/.kh_history
+	logdName=/var/log/kinghistorian/khserverlog*
+	logName=/var/log/kinghistorian/khclientlog*
+	loginfoName=/var/log/kinghistorian/khinfo*
+	installdirName=/usr/local/kinghistorian
+	adaptercfgName=/etc/kinghistorian/khadapter.toml
+	rundName=/usr/local/kinghistorian/bin/run_khserver_and_khadapter.sh
+	gdbName=/usr/local/kinghistorian/bin/khserver-dump-cfg.gdb
+	uninstallName=rmkh
+	uninstalltoolName=rmkhtools
+	install
+	insert
+	checkpattern
+	uninstall
+	;;
+"jh")
+	serName=jh_iot-enterprise-server-$2-Linux-x64.tar.gz
+	serdisName=jh_iot-enterprise-server-$2
+	cliName=jh_iot-enterprise-client-$2-Linux-x64.tar.gz
+	arbName=jh_iot-enterprise-arbitrator-$2-Linux-x64.tar.gz
+	arbdisName=jh_iot-enterprise-arbitrator-$2
+	toolName=*Tools-*-Linux-x64.tar.gz
+	tooldisName=*Tools*
+	dirName=jh_iot
+	versionNum=$2
+	serverd=jh_taosd
+	cli=jh_taos
+	pass=jhdata
+	adapterd=jh_taosadapter
+	demoName=jh_taosBenchmark
+	dumpName=jh_taosdump
+	datadir=/var/lib/jh_taos
+	dumpdir=/var/lib/jh_taos/dump
+	dumpnopassdir=/var/lib/jh_taos/dumpnopass
+	cfgName=/etc/jh_taos/jh_taos.cfg
+	hisName=/root/.jh_taos_history
+	logdName=/var/log/jh_taos/jh_taosdlog*
+	logName=/var/log/jh_taos/jh_taoslog*
+	loginfoName=/var/log/jh_taos/jh_taosinfo*
+	installdirName=/usr/local/jh_taos
+	adaptercfgName=/etc/jh_taos/jh_taosadapter.toml
+	rundName=/usr/local/jh_taos/bin/run_jh_taosd_and_jh_taosadapter.sh
+	gdbName=/usr/local/jh_taos/bin/jh_taosd-dump-cfg.gdb
+	uninstallName=rmjh
+	uninstalltoolName=rmjhtools
+	install
+	insert
+	checkpattern
+	uninstall
+	;;
+"power")
+	serName=Power-enterprise-server-$2-Linux-x64.tar.gz
+	serdisName=Power-enterprise-server-$2
+	cliName=Power-enterprise-client-$2-Linux-x64.tar.gz
+	arbName=Power-enterprise-arbitrator-$2-Linux-x64.tar.gz
+	arbdisName=Power-enterprise-arbitrator-$2
+	toolName=*Tools-*-Linux-x64.tar.gz
+	tooldisName=*Tools*
+	dirName=PowerDB
+	versionNum=$2
+	serverd=powerd
+	cli=power
+	pass=powerdb
+	adapterd=poweradapter
+	demoName=powerBenchmark
+	dumpName=powerdump
+	datadir=/var/lib/power
+	dumpdir=/var/lib/power/dump
+	dumpnopassdir=/var/lib/power/dumpnopass
+	cfgName=/etc/power/power.cfg
+	hisName=/root/.power_history
+	logdName=/var/log/power/powerdlog*
+	logName=/var/log/power/powerlog*
+	loginfoName=/var/log/power/powerinfo*
+	installdirName=/usr/local/power
+	adaptercfgName=/etc/power/poweradapter.toml
+	rundName=/usr/local/power/bin/run_powerd_and_poweradapter.sh
+	gdbName=/usr/local/power/bin/powerd-dump-cfg.gdb
+	uninstallName=rmpower
+	uninstalltoolName=rmpowertools
+	install
+	insert
+	checkpattern
+	uninstall
+	;;
+"iBKHistory")
+	serName=iBKHistory-enterprise-server-$2-Linux-x64.tar.gz
+	serdisName=iBKHistory-enterprise-server-$2
+	cliName=iBKHistory-enterprise-client-$2-Linux-x64.tar.gz
+	arbName=iBKHistory-enterprise-arbitrator-$2-Linux-x64.tar.gz
+	arbdisName=iBKHistory-enterprise-arbitrator-$2
+	toolName=*Tools-*-Linux-x64.tar.gz
+	tooldisName=*Tools*
+	dirName=iBKHistory
+	versionNum=$2
+	serverd=ibkhistoryd
+	cli=ibkhistory
+	pass=historydata
+	adapterd=ibkhistoryadapter
+	demoName=ibkhistoryBenchmark
+	dumpName=ibkhistorydump
+	datadir=/var/lib/ibkhistory
+	dumpdir=/var/lib/ibkhistory/dump
+	dumpnopassdir=/var/lib/ibkhistory/dumpnopass
+	cfgName=/etc/ibkhistory/ibkhistory.cfg
+	hisName=/root/.ibkhistory_his
+	logdName=/var/log/ibkhistory/ibkhistorydlog*
+	logName=/var/log/ibkhistory/ibkhistorylog*
+	loginfoName=/var/log/ibkhistory/ibkhistoryinfo*
+	installdirName=/usr/local/ibkhistory
+	adaptercfgName=/etc/ibkhistory/ibkhistoryadapter.toml
+	rundName=/usr/local/ibkhistory/bin/run_ibkhistoryd_and_ibkhistoryadapter.sh
+	gdbName=/usr/local/ibkhistory/bin/ibkhistoryd-dump-cfg.gdb
+	uninstallName=rmibkhistory
+	uninstalltoolName=rmibkhistorytools
+	install
+	insert
+	checkpattern
+	uninstall
+	;;
+*)
+	echo -e "\e[1;31mOEM Name Error![hm,pro,kh,jh,power...]\e[0m"
+	echo "Usage: ./oemcheck oemname server_version" 
+        echo -e "\toemname: OEM name,like hm,pro,kh,jh,power..."
+        echo -e "\tserver_version: server.tar.gz version, like 2.4.0.18"
+	exit
+;;
+esac
